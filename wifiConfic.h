@@ -18,6 +18,7 @@ unsigned long lastTimePress = millis();
 DHT dht(DHTPIN, DHTTYPE);
 int wifiMode; // 0: Chế độ cấu hình web , 1: Chế độ kết nối, 2: Mất wifi
 unsigned long blinkTime = millis();
+int checklostwifi=0;
 
 //Tạo biến chứa mã nguồn trang web HTML để hiển thị trình hiển thị thông số Nhiệt độ và Độ ẩm 
 const char html1[] PROGMEM = R"html(
@@ -300,9 +301,10 @@ const char html[] PROGMEM = R"html(
             xhttp.send();
           }
           function reStart(){
-            xhttp.onreadystatechange = function(){
+             xhttp.onreadystatechange = function(){
               if(xhttp.readyState==4&&xhttp.status==200){
-                document.getElementById("info").innerHTML = "Scanning wifi network...!";
+                data = xhttp.responseText;
+                alert(data);
               }
             }
             xhttp.open("GET","/reStart",true);
@@ -314,6 +316,23 @@ const char html[] PROGMEM = R"html(
 )html";
 
 void scanWiFiNetworks() {
+// int wifi_nets = WiFi.scanNetworks(true, true);
+//     const unsigned long t = millis();
+//     while(wifi_nets<0 && millis()-t<10000){
+//       delay(20);
+//       wifi_nets = WiFi.scanComplete();
+//     }
+//     DynamicJsonDocument doc(200);
+//     for(int i=0; i<wifi_nets; ++i){
+//       Serial.println(WiFi.SSID(i));
+//       doc.add(WiFi.SSID(i));
+//     }
+//     //["tên wifi1","tên wifi2","tên wifi3",.....]
+//     String wifiList = "";
+//     serializeJson(doc, wifiList);
+//     Serial.println("Wifi list: "+wifiList);
+//     webServer.send(200,"application/json",wifiList);
+//   }
   Serial.println("Scanning WiFi...");
   int numNetworks = WiFi.scanNetworks();
   String json = "[";
@@ -361,11 +380,22 @@ void WiFiEvent(WiFiEvent_t event) {
             break;
         case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
             
-            if (digitalRead(btnPin)!=LOW){
+            if (checklostwifi<10){
             Serial.println("WiFi lost connection.");
             wifiMode=2;
             delay(5000);
             WiFi.begin(ssid, password);
+            checklostwifi+=1;}
+            else {
+              for (int i = 0; i < 100; i++) {
+        EEPROM.write(i, 0);  // Ghi giá trị 0 vào từng ô nhớ
+    }
+
+    EEPROM.commit();  // Lưu thay đổi vào bộ nhớ thực tế
+    Serial.println("✅ EEPROM đã được xóa hoàn toàn!");
+
+    delay(2000);
+    ESP.restart();
             }
             break;
         case ARDUINO_EVENT_WIFI_STA_GOT_IP:
@@ -382,6 +412,7 @@ void WiFiEvent(WiFiEvent_t event) {
 void setupWifi(){
   EEPROM.get(0, ssid);
   EEPROM.get(50, password);
+  
   Serial.print("SSID từ EEPROM: ");
   Serial.println(ssid);
   Serial.print("Mật khẩu từ EEPROM: ");
@@ -397,7 +428,7 @@ void setupWifi(){
     delay(500);
     }
     Serial.println("\nĐa Hoan thanh ket noi WiFi!");
-    
+    checklostwifi=0;
   }
   else{
     Serial.println("ESP32 wifi network created!");
@@ -420,7 +451,7 @@ String readDHTTemperature(){
   
   if (isnan(t))
   {
-    Serial.println("Failed to read from DHT sensor!");
+    Serial.print("Failed to read from DHT sensor! ");
     return "--";
   }
   else
@@ -434,7 +465,7 @@ String readDHTHumidity(){
   float h = dht.readHumidity();
   if (isnan(h))
   {
-    Serial.println("Failed to read from DHT sensor!");
+    Serial.print("Failed to read from DHT sensor! ");
     return "--";
   }
   else
@@ -465,11 +496,15 @@ void setupWebServer(){
     webServer.send(200, "text/html", html);
   });
   webServer.on("/scanWifi", scanWiFiNetworks);
-  //webServer.on("/reStart", scanWiFiNetworks);
+  webServer.on("/reStart", []{
+    webServer.send(200,"text/plain","Esp32 is restarting!");
+    delay(3000);
+    ESP.restart();
+  });
   webServer.on("/saveWifi", []() { 
    if (webServer.hasArg("ssid") && webServer.hasArg("pass")) {
-    ssid = webServer.arg("ssid");
-    password = webServer.arg("pass");
+    ssid = webServer.arg("ssid").c_str();
+    password = webServer.arg("pass").c_str();
     
     EEPROM.put(0, ssid);
     EEPROM.put(50, password);
@@ -527,11 +562,11 @@ public:
    void run(){
     String h= readDHTHumidity();
     String t= readDHTTemperature();
-    Serial.print(F("Humidity: "));
-    Serial.print(h);
-    Serial.print(F("%  Temperature: "));
-    Serial.print(t);
-    Serial.print(F("°C ")); 
+    // Serial.print(F("Humidity: "));
+    // Serial.print(h);
+    // Serial.print(F("%  Temperature: "));
+    // Serial.print(t);
+    // Serial.print(F("°C ")); 
     
     delay(2000);
   }
