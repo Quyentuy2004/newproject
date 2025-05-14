@@ -1,25 +1,32 @@
 #include <EEPROM.h> //Tên wifi và mật khẩu lưu vào ô nhớ 0->96
 #include <ArduinoJson.h>
-#include "DHT.h"
 #include <WiFi.h>
 #include <WebServer.h> //Thêm thư viện web server
-WebServer webServer(80); //Khởi tạo đối tượng webServer port 80
 #include <Ticker.h>
+#include "dodht22.h"
 
-Ticker blinker;
-String ssid;
-String password;
-#define DHTPIN 4 
-#define DHTTYPE DHT11 
+
+
+
+
+
+
 #define ledPin 2
 #define btnPin 0
-unsigned long lastTimePress = millis();
 #define PUSHTIME 5000
-DHT dht(DHTPIN, DHTTYPE);
+
+WebServer webServer(80); //Khởi tạo đối tượng webServer port 80
+
+
 int wifiMode; // 0: Chế độ cấu hình web , 1: Chế độ kết nối, 2: Mất wifi
 unsigned long blinkTime = millis();
 int checklostwifi=0;
+unsigned long lastTimePress = millis();
+Ticker blinker;
+String ssid;
+String password;
 
+ 
 //Tạo biến chứa mã nguồn trang web HTML để hiển thị trình hiển thị thông số Nhiệt độ và Độ ẩm 
 const char html1[] PROGMEM = R"html(
   <!DOCTYPE html>
@@ -316,33 +323,58 @@ const char html[] PROGMEM = R"html(
 )html";
 
 void scanWiFiNetworks() {
-// int wifi_nets = WiFi.scanNetworks(true, true);
-//     const unsigned long t = millis();
-//     while(wifi_nets<0 && millis()-t<10000){
-//       delay(20);
-//       wifi_nets = WiFi.scanComplete();
-//     }
-//     DynamicJsonDocument doc(200);
-//     for(int i=0; i<wifi_nets; ++i){
-//       Serial.println(WiFi.SSID(i));
-//       doc.add(WiFi.SSID(i));
-//     }
-//     //["tên wifi1","tên wifi2","tên wifi3",.....]
-//     String wifiList = "";
-//     serializeJson(doc, wifiList);
-//     Serial.println("Wifi list: "+wifiList);
-//     webServer.send(200,"application/json",wifiList);
-//   }
-  Serial.println("Scanning WiFi...");
-  int numNetworks = WiFi.scanNetworks();
-  String json = "[";
-  for (int i = 0; i < numNetworks; i++) {
+  // int wifi_nets = WiFi.scanNetworks(true, true);
+  //     const unsigned long t = millis();
+  //     while(wifi_nets<0 && millis()-t<10000){
+  //       delay(20);
+  //       wifi_nets = WiFi.scanComplete();
+  //     }
+  //     DynamicJsonDocument doc(200);
+  //     for(int i=0; i<wifi_nets; ++i){
+  //       Serial.println(WiFi.SSID(i));
+  //       doc.add(WiFi.SSID(i));
+  //     }
+  //     //["tên wifi1","tên wifi2","tên wifi3",.....]
+   //     String wifiList = "";
+  //     serializeJson(doc, wifiList);
+  //     Serial.println("Wifi list: "+wifiList);
+ //     webServer.send(200,"application/json",wifiList);
+ //   }
+
+   Serial.println("Scanning WiFi...");
+   int numNetworks = WiFi.scanNetworks();
+   String json = "[";
+   for (int i = 0; i < numNetworks; i++) {
     if (i) json += ",";
-    json += "\"" + WiFi.SSID(i) + "\"";
-  }
-  json += "]";
-  Serial.println(json);
-  webServer.send(200, "application/json", json);
+     json += "\"" + WiFi.SSID(i) + "\"";
+   }
+ json += "]";
+   Serial.println(json);
+   webServer.send(200, "application/json", json);
+
+  //  wifi_scan_config_t scan_config;
+  //   scan_config.ssid = NULL;
+  //   scan_config.bssid = NULL;
+  //   scan_config.channel = 0;
+  //   scan_config.show_hidden = true;
+  //   scan_config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
+  //   scan_config.scan_time.active.min = 100;
+  //   scan_config.scan_time.active.max = 150;
+
+  //   esp_wifi_scan_start(&scan_config, true);  // Blocking scan
+
+  //   uint16_t ap_num = MAX_APs;
+  //   wifi_ap_record_t ap_records[MAX_APs];
+  //   esp_wifi_scan_get_ap_records(&ap_num, ap_records);
+
+  //   Serial.printf("Tìm thấy %d mạng WiFi:\n", ap_num);
+  //    for (int i = 0; i < ap_num; i++) {
+  //   if (i) json += ",";
+  //   json += "\"" + String((char*)ap_records[i].ssid) + "\"";
+  //  }
+  //  json += "]";
+  //  Serial.println(json);
+  //  webServer.send(200, "application/json", json);
 }
 
 void blinkLed(uint32_t t){
@@ -447,7 +479,7 @@ void setupWifi(){
 String readDHTTemperature(){
   // Sensor DHT doc du lieu cham 2s 1 lan nen doc nhanh < 2s co the la lay gia tri cu 
   // tra ve nhiet do C
-  float t = dht.readTemperature();
+  float t = DHT22.runTemp();
   
   if (isnan(t))
   {
@@ -462,7 +494,7 @@ String readDHTTemperature(){
 
 String readDHTHumidity(){
   // doc do am theo %
-  float h = dht.readHumidity();
+  float h = DHT22.runHum();
   if (isnan(h))
   {
     Serial.print("Failed to read from DHT sensor! ");
@@ -481,10 +513,10 @@ void setupWebServer(){
         webServer.on("/",[]{
     webServer.send(200, "text/html", html1);
     webServer.on("/temperature", HTTP_GET, []
-            { webServer.send(200, "text/plain", readDHTTemperature().c_str()); }
+            { webServer.send(200, "text/plain", String (DHT22.runTemp())); }
             );
     webServer.on("/humidity", HTTP_GET, []
-            { webServer.send(200, "text/plain", readDHTHumidity().c_str());
+            { webServer.send(200, "text/plain", String(DHT22.runHum()));
              });
 
   });
@@ -541,33 +573,34 @@ void checkButton(){
 class Config{
 public:
   void begin(){
+    DHT22.begin();
     pinMode(ledPin,OUTPUT);
     pinMode(btnPin,INPUT_PULLUP);
     blinker.attach_ms(50, ledControl);
     EEPROM.begin(100);
     setupWifi();
     if(wifiMode==0) setupWebServer();
+
+  //    esp_err_t ret = nvs_flash_init();
+  //   if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+  //       nvs_flash_erase();
+  //       nvs_flash_init();
+  //   }
+  //  delay(1000);
+  //   // Khởi tạo WiFi
+  //   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+  //   esp_wifi_init(&cfg);
+  //   esp_wifi_set_mode(WIFI_MODE_STA);
+  //   esp_wifi_start();
+
+    delay(100);  // Đợi WiFi khởi động
   }
   void run(){
     checkButton();
     if(wifiMode==0)webServer.handleClient();
+   // DHT22.runTemp(); 
+  //DHT22.runHum();
   }
 } wifiConfig;
 
-class DHTConfig{
-public:
-  void begin(){
-    dht.begin();
-  }
-   void run(){
-    String h= readDHTHumidity();
-    String t= readDHTTemperature();
-    // Serial.print(F("Humidity: "));
-    // Serial.print(h);
-    // Serial.print(F("%  Temperature: "));
-    // Serial.print(t);
-    // Serial.print(F("°C ")); 
-    
-    delay(2000);
-  }
-} dhtConfig;
+
