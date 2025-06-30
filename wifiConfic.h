@@ -1,11 +1,9 @@
 #include <EEPROM.h> //Tên wifi và mật khẩu lưu vào ô nhớ 0->96
 #include <ArduinoJson.h>
 #include <WiFi.h>
-#include <WebServer.h> //Thêm thư viện web server
-#include <Ticker.h>
-#include "dodht22.h"
-
-
+#include <WebServer.h> //WebServer: Tạo web server để xử lý yêu cầu HTTP.
+#include <Ticker.h>//Ticker: Tạo các tác vụ định kỳ (dùng cho nháy LED).
+#include "dodht22.h"//dodht22.h: Thư viện riêng để đọc cảm biến DHT22.
 
 
 
@@ -20,12 +18,13 @@ WebServer webServer(80); //Khởi tạo đối tượng webServer port 80
 
 int wifiMode; // 0: Chế độ cấu hình web , 1: Chế độ kết nối, 2: Mất wifi
 unsigned long blinkTime = millis();
-int checklostwifi=0;
-unsigned long lastTimePress = millis();
+int checklostwifi=0;//checklostwifi: Nếu mất Wi-Fi hơn 10 lần thì xóa EEPROM và reset.
+unsigned long lastTimePress = millis();//lastTimePress: Dùng kiểm tra thời gian giữ nút để reset Wi-Fi.
 Ticker blinker;
-String ssid;
-String password;
-
+String ssid;// biến toàn cục lưu thông tin ssid của wifi
+String password;//biến toàn cục lưu thông tin password của wifi
+float h;
+float t;
  
 //Tạo biến chứa mã nguồn trang web HTML để hiển thị trình hiển thị thông số Nhiệt độ và Độ ẩm 
 const char html1[] PROGMEM = R"html(
@@ -322,284 +321,292 @@ const char html[] PROGMEM = R"html(
   </html>
 )html";
 
+// Hàm quét các mạng Wi-Fi xung quanh và gửi danh sách SSID về client dưới dạng JSON
 void scanWiFiNetworks() {
-  // int wifi_nets = WiFi.scanNetworks(true, true);
-  //     const unsigned long t = millis();
-  //     while(wifi_nets<0 && millis()-t<10000){
-  //       delay(20);
-  //       wifi_nets = WiFi.scanComplete();
-  //     }
-  //     DynamicJsonDocument doc(200);
-  //     for(int i=0; i<wifi_nets; ++i){
-  //       Serial.println(WiFi.SSID(i));
-  //       doc.add(WiFi.SSID(i));
-  //     }
-  //     //["tên wifi1","tên wifi2","tên wifi3",.....]
-   //     String wifiList = "";
-  //     serializeJson(doc, wifiList);
-  //     Serial.println("Wifi list: "+wifiList);
- //     webServer.send(200,"application/json",wifiList);
- //   }
+    Serial.println("Scanning WiFi..."); // In ra Serial để báo bắt đầu quét Wi-Fi
 
-   Serial.println("Scanning WiFi...");
-   int numNetworks = WiFi.scanNetworks();
-   String json = "[";
-   for (int i = 0; i < numNetworks; i++) {
-    if (i) json += ",";
-     json += "\"" + WiFi.SSID(i) + "\"";
-   }
- json += "]";
-   Serial.println(json);
-   webServer.send(200, "application/json", json);
+    int numNetworks = WiFi.scanNetworks(); // Quét và trả về số mạng Wi-Fi tìm thấy
 
-  //  wifi_scan_config_t scan_config;
-  //   scan_config.ssid = NULL;
-  //   scan_config.bssid = NULL;
-  //   scan_config.channel = 0;
-  //   scan_config.show_hidden = true;
-  //   scan_config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-  //   scan_config.scan_time.active.min = 100;
-  //   scan_config.scan_time.active.max = 150;
+    String json = "["; // Khởi tạo chuỗi JSON dạng mảng
 
-  //   esp_wifi_scan_start(&scan_config, true);  // Blocking scan
+    for (int i = 0; i < numNetworks; i++) {
+        if (i) json += ","; // Nếu không phải phần tử đầu tiên thì thêm dấu phẩy phân cách
 
-  //   uint16_t ap_num = MAX_APs;
-  //   wifi_ap_record_t ap_records[MAX_APs];
-  //   esp_wifi_scan_get_ap_records(&ap_num, ap_records);
+        // Thêm SSID của mạng thứ i vào chuỗi JSON, được đặt trong dấu ngoặc kép
+        json += "\"" + WiFi.SSID(i) + "\"";
+    }
 
-  //   Serial.printf("Tìm thấy %d mạng WiFi:\n", ap_num);
-  //    for (int i = 0; i < ap_num; i++) {
-  //   if (i) json += ",";
-  //   json += "\"" + String((char*)ap_records[i].ssid) + "\"";
-  //  }
-  //  json += "]";
-  //  Serial.println(json);
-  //  webServer.send(200, "application/json", json);
+    json += "]"; // Kết thúc mảng JSON
+
+    Serial.println(json); // In ra Serial chuỗi JSON kết quả
+
+    // Gửi chuỗi JSON về trình duyệt với mã HTTP 200 và kiểu nội dung là "application/json"
+    webServer.send(200, "application/json", json);
 }
 
-void blinkLed(uint32_t t){
-  if(millis()-blinkTime>t){
-    digitalWrite(ledPin,!digitalRead(ledPin));
-    blinkTime=millis();
+
+// Hàm nhấp nháy LED với chu kỳ t (ms)
+// t: thời gian giữa hai lần đổi trạng thái LED (tính bằng mili giây)
+void blinkLed(uint32_t t) {
+  // Kiểm tra nếu thời gian đã trôi qua lớn hơn t kể từ lần nháy trước
+  if (millis() - blinkTime > t) {
+    // Đảo trạng thái chân ledPin (nếu đang HIGH thì chuyển LOW và ngược lại)
+    digitalWrite(ledPin, !digitalRead(ledPin));
+    
+    // Cập nhật thời điểm nháy LED gần nhất
+    blinkTime = millis();
   }
 }
 
-void ledControl(){
-  if(digitalRead(btnPin)==LOW){
-    if(millis()-lastTimePress<PUSHTIME){
+// Hàm điều khiển nháy LED theo trạng thái nút nhấn và chế độ Wi-Fi
+void ledControl() {
+  // Nếu nút đang được nhấn (LOW vì nút nối với GND)
+  if (digitalRead(btnPin) == LOW) {
+    
+    // Kiểm tra nếu thời gian nhấn ngắn hơn ngưỡng PUSHTIME
+    if (millis() - lastTimePress < PUSHTIME) {
+      // Nháy LED chậm (1 giây) - biểu thị nhấn ngắn
       blinkLed(1000);
-    }else{
+    } else {
+      // Nháy LED nhanh (50ms) - biểu thị nhấn giữ lâu
       blinkLed(50);
     }
-  }else{
-    if(wifiMode==0){
+
+  } else {
+    // Nếu không nhấn nút, LED sẽ nháy theo chế độ Wi-Fi hiện tại
+
+    if (wifiMode == 0) {
+      // Chế độ 0: AP mode — nháy LED nhanh (50ms)
       blinkLed(50);
-    }else if(wifiMode==1){
+
+    } else if (wifiMode == 1) {
+      // Chế độ 1: STA chưa kết nối — nháy LED chậm (3 giây)
       blinkLed(3000);
-    }else if(wifiMode==2){
+
+    } else if (wifiMode == 2) {
+      // Chế độ 2: STA đã kết nối — nháy LED vừa (300ms)
       blinkLed(300);
     }
   }
 }
 
+// Hàm xử lý các sự kiện WiFi, tự động gọi khi có sự kiện xảy ra
 void WiFiEvent(WiFiEvent_t event) {
     Serial.print("Event:");
-    Serial.println(event);
+    Serial.println(event); // In mã số sự kiện ra Serial để kiểm tra
 
     switch (event) {
+        // Sự kiện khi ESP32 đã kết nối với AP thành công (chưa lấy IP)
         case ARDUINO_EVENT_WIFI_STA_CONNECTED:
             Serial.println("WiFi connected!");
+             wifiMode = 0; 
             break;
+
+        // Sự kiện khi ESP32 bị mất kết nối WiFi
         case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
             
-            if (checklostwifi<10){
-            Serial.println("WiFi lost connection.");
-            wifiMode=2;
-            delay(5000);
-            WiFi.begin(ssid, password);
-            checklostwifi+=1;}
-            else {
-              for (int i = 0; i < 100; i++) {
-        EEPROM.write(i, 0);  // Ghi giá trị 0 vào từng ô nhớ
-    }
+                // Nếu số lần mất kết nối < 10 lần thì thử kết nối lại Wi-Fi
+                Serial.println("WiFi lost connection.");
+                wifiMode = 2; // Đặt chế độ Wi-Fi về 2 (đang cố gắng reconnect)
+                       // Đợi ngắt kết nối hoàn tất
+                WiFi.begin(ssid, password); // Gọi lại WiFi.begin để kết nối lại
+                
+    
 
-    EEPROM.commit();  // Lưu thay đổi vào bộ nhớ thực tế
-    Serial.println("✅ EEPROM đã được xóa hoàn toàn!");
-
-    delay(2000);
-    ESP.restart();
-            }
-            break;
-        case ARDUINO_EVENT_WIFI_STA_GOT_IP:
-            Serial.print("IP Address: ");
-            Serial.println(WiFi.localIP());
+   
             
             break;
+
+        // Sự kiện khi ESP32 đã nhận được địa chỉ IP từ Wi-Fi
+        case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+            Serial.print("IP Address: ");
+            Serial.println(WiFi.localIP()); // In địa chỉ IP đã nhận được ra Serial
+            break;
+
+        // Mặc định khi không khớp với bất kỳ sự kiện nào ở trên
         default:
-        Serial.print("No ");
+            Serial.print("No ");
             break;
     }
 }
 
 void setupWifi(){
-  EEPROM.get(0, ssid);
-  EEPROM.get(50, password);
   
-  Serial.print("SSID từ EEPROM: ");
-  Serial.println(ssid);
-  Serial.print("Mật khẩu từ EEPROM: ");
-  Serial.println(password);
-  WiFi.onEvent(WiFiEvent);//chỉ cần gọi một lần trước khi kết nối WiFi, vì nó đăng ký lắng nghe sự kiện WiFi suốt quá trình chạy.
-  if(ssid.length()>0){
+
+  // Đăng ký hàm xử lý sự kiện WiFi, chỉ cần gọi một lần duy nhất
+  WiFi.onEvent(WiFiEvent); // Hàm WiFiEvent sẽ được gọi mỗi khi có sự kiện WiFi xảy ra
+
+  // Nếu SSID hợp lệ (người dùng đã cấu hình trước đó)
+  if(ssid.length() > 0){
     Serial.println("Connecting to wifi...!");
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
+    WiFi.mode(WIFI_STA);               // Chuyển ESP32 sang chế độ Station (kết nối WiFi)
+    WiFi.begin(ssid, password);        // Kết nối đến WiFi với SSID và mật khẩu đã lưu
+
     Serial.print("Đang kết nối tới WiFi");
+    // Vòng lặp chờ cho đến khi kết nối thành công
     while (WiFi.status() != WL_CONNECTED) {
-    Serial.print(".");
-    delay(500);
+      Serial.print(".");
+      delay(500);
     }
-    Serial.println("\nĐa Hoan thanh ket noi WiFi!");
-    checklostwifi=0;
-  }
-  else{
-    Serial.println("ESP32 wifi network created!");
-    WiFi.mode(WIFI_AP);
+
+    Serial.println("\n✅ Đã hoàn thành kết nối WiFi!");
+    checklostwifi = 0;  // Reset bộ đếm mất kết nối
+  } 
+  else {
+    // Nếu không có SSID trong EEPROM, khởi tạo chế độ Access Point để người dùng cấu hình WiFi
+    Serial.println("🚀 ESP32 wifi network created!");
+    WiFi.mode(WIFI_AP);  // Chuyển sang chế độ Access Point
+
     uint8_t macAddr[6];
-    WiFi.softAPmacAddress(macAddr);
-    String ssid_ap="ESP32-"+String(macAddr[4],HEX)+String(macAddr[5],HEX);
-    ssid_ap.toUpperCase();
+    WiFi.softAPmacAddress(macAddr); // Lấy địa chỉ MAC của ESP32 ở chế độ AP
+
+    // Tạo tên SSID cho AP dựa trên 2 byte cuối của địa chỉ MAC
+    String ssid_ap = "ESP32-" + String(macAddr[4], HEX) + String(macAddr[5], HEX);
+    ssid_ap.toUpperCase(); // Chuyển tên SSID thành chữ in hoa
+
+    // Khởi động Access Point với SSID mới tạo
     WiFi.softAP(ssid_ap.c_str());
-    Serial.println("Access point name:"+ssid_ap);
-    Serial.println("Web server access address:"+WiFi.softAPIP().toString());
-    wifiMode=0;
-  }
-}
 
-String readDHTTemperature(){
-  // Sensor DHT doc du lieu cham 2s 1 lan nen doc nhanh < 2s co the la lay gia tri cu 
-  // tra ve nhiet do C
-  float t = DHT22.runTemp();
-  
-  if (isnan(t))
-  {
-    Serial.print("Failed to read from DHT sensor! ");
-    return "--";
-  }
-  else
-  {
-      return String(t);
-  }
-}
+    Serial.println("Tên mạng Access Point: " + ssid_ap);
+    Serial.println("Truy cập Web Server tại địa chỉ: " + WiFi.softAPIP().toString());
 
-String readDHTHumidity(){
-  // doc do am theo %
-  float h = DHT22.runHum();
-  if (isnan(h))
-  {
-    Serial.print("Failed to read from DHT sensor! ");
-    return "--";
-  }
-  else
-  {
-    return String(h);
+    wifiMode = 0; // Đặt trạng thái WiFi = 0 (chế độ AP)
   }
 }
 
 
 
-void setupWebServer(){
-  if (WiFi.status() == WL_CONNECTED) {  
-        webServer.on("/",[]{
-    webServer.send(200, "text/html", html1);
-    webServer.on("/temperature", HTTP_GET, []
-            { webServer.send(200, "text/plain", String (DHT22.runTemp())); }
-            );
-    webServer.on("/humidity", HTTP_GET, []
-            { webServer.send(200, "text/plain", String(DHT22.runHum()));
-             });
 
-  });
-        delay(2000);
-        Serial.println("Web server started");
-    }
-    else {
-  webServer.on("/",[]{
-    webServer.send(200, "text/html", html);
-  });
-  webServer.on("/scanWifi", scanWiFiNetworks);
-  webServer.on("/reStart", []{
-    webServer.send(200,"text/plain","Esp32 is restarting!");
-    delay(3000);
-    ESP.restart();
-  });
-  webServer.on("/saveWifi", []() { 
-   if (webServer.hasArg("ssid") && webServer.hasArg("pass")) {
-    ssid = webServer.arg("ssid").c_str();
-    password = webServer.arg("pass").c_str();
+
+
+
+
+// Hàm thiết lập WebServer cho ESP32
+void setupWebServer() {
+  // Nếu ESP32 đang kết nối Wi-Fi (chế độ STA)
+  if (WiFi.status() == WL_CONNECTED) {
     
-    EEPROM.put(0, ssid);
-    EEPROM.put(50, password);
-    EEPROM.commit();  // Lưu vào bộ nhớ thực tế
+    // Thiết lập route "/" trả về giao diện giám sát html1
+    webServer.on("/", [] {
+      webServer.send(200, "text/html", html1);
+    });
+      
+      // Thiết lập API đọc nhiệt độ từ DHT22, trả về dạng text
+      webServer.on("/temperature", HTTP_GET, [] {
+        webServer.send(200, "text/plain", String(t));
+      });
 
-    webServer.send(200, "text/plain", "WiFi information saved! Restarting...");
-    delay(2000);
+      // Thiết lập API đọc độ ẩm từ DHT22, trả về dạng text
+      webServer.on("/humidity", HTTP_GET, [] {
+        webServer.send(200, "text/plain", String(h));
+      });
     
-   } else {
-    webServer.send(400, "text/plain", "Missing parameters");
-   }
-  });}
+
+    delay(2000);  // Delay nhẹ để ổn định hệ thống
+    Serial.println("✅ Web server started (STA mode)");
+  } 
+  else {  // Nếu chưa kết nối Wi-Fi (chế độ AP để cấu hình Wi-Fi)
+
+    // Route "/" trả về giao diện cấu hình Wi-Fi html
+    webServer.on("/", [] {
+      webServer.send(200, "text/html", html);
+    });
+
+    // Route "/scanWifi" gọi hàm quét mạng Wi-Fi và trả danh sách SSID
+    webServer.on("/scanWifi", scanWiFiNetworks);
+
+    // Route "/reStart" để khởi động lại ESP32
+    webServer.on("/reStart", [] {
+      webServer.send(200, "text/plain", "Esp32 is restarting!");
+      delay(3000);
+      ESP.restart();  // Khởi động lại
+    });
+
+    // Route "/saveWifi" lưu SSID và mật khẩu vào EEPROM
+    webServer.on("/saveWifi", []() {
+       String ssid_temp = webServer.arg("ssid");
+    String password_temp = webServer.arg("pass");
+    Serial.println("SSID:"+ssid_temp);
+    Serial.println("PASS:"+password_temp);
+    EEPROM.writeString(0,ssid_temp);
+    EEPROM.writeString(32,password_temp);
+    EEPROM.commit();
+    webServer.send(200,"text/plain","Wifi has been saved!");// Kiểm tra nếu có đủ thông tin từ người dùng
+      // if (webServer.hasArg("ssid") && webServer.hasArg("pass")) {
+      //   ssid = webServer.arg("ssid").c_str();       // Lấy SSID từ client
+      //   password = webServer.arg("pass").c_str();   // Lấy mật khẩu từ client
+        
+      //   EEPROM.put(0, ssid);          // Lưu SSID vào EEPROM từ địa chỉ 0
+      //   EEPROM.put(50, password);     // Lưu mật khẩu từ địa chỉ 50
+      //   EEPROM.commit();              // Ghi vào bộ nhớ thực tế
+
+      //   webServer.send(200, "text/plain", "WiFi information saved! Restarting...");
+      //   delay(2000);  // Đợi một chút trước khi khởi động lại
+      //   ESP.restart();
+      // } else {
+      //   webServer.send(400, "text/plain", "Missing parameters");  // Báo lỗi thiếu thông tin
+      // }
+    });
+  }
+
+  // Khởi động WebServer
   webServer.begin();
 }
 
-void checkButton(){
-  if(digitalRead(btnPin)==LOW){
+// Hàm kiểm tra nút nhấn để khôi phục cấu hình Wi-Fi mặc định nếu giữ nút đủ lâu
+void checkButton() {
+  // Kiểm tra nếu nút được nhấn (mức LOW do nút kéo xuống GND)
+  if (digitalRead(btnPin) == LOW) {
     Serial.println("Press and hold for 5 seconds to reset to default!");
-    if(millis()-lastTimePress>PUSHTIME){
-      for(int i=0; i<100;i++){
-        EEPROM.write(i,0);
+
+    // Nếu nút được nhấn liên tục quá thời gian định nghĩa (PUSHTIME)
+    if (millis() - lastTimePress > PUSHTIME) {
+      // Xoá toàn bộ vùng nhớ EEPROM (giả sử 100 byte được dùng để lưu SSID, password,...)
+      for (int i = 0; i < 100; i++) {
+        EEPROM.write(i, 0);  // Ghi giá trị 0 vào từng ô nhớ
       }
-      EEPROM.commit();
-      Serial.println("EEPROM memory erased!");
-      delay(2000);
-      ESP.restart();
+
+      EEPROM.commit();  // Lưu thay đổi vào bộ nhớ thực tế
+      Serial.println("✅ EEPROM memory erased!");
+
+      delay(2000);       // Đợi 2 giây trước khi khởi động lại
+      ESP.restart();     // Khởi động lại ESP32 để vào chế độ cấu hình Wi-Fi
     }
-    delay(1000);
-  }else{
-    lastTimePress=millis();
+
+    delay(1000);  // Đợi thêm 1 giây để tránh đọc nhấn nhiều lần liên tục
+  } else {
+    // Nếu nút không nhấn, cập nhật thời gian cuối cùng nút được nhả ra
+    lastTimePress = millis();
   }
 }
+
 
 class Config{
 public:
   void begin(){
-    DHT22.begin();
-    pinMode(ledPin,OUTPUT);
+    DHT22.begin();// cấu hình dht22 
+    pinMode(ledPin,OUTPUT);// cấu hình led để hiển thị trạng thái Wifi
     pinMode(btnPin,INPUT_PULLUP);
     blinker.attach_ms(50, ledControl);
-    EEPROM.begin(100);
-    setupWifi();
+      EEPROM.begin(100);
+    char ssid_temp[32], password_temp[64];
+    EEPROM.readString(0,ssid_temp, sizeof(ssid_temp));
+    EEPROM.readString(32,password_temp,sizeof(password_temp));
+    ssid = String(ssid_temp);
+    password = String(password_temp);
+
+    setupWifi();// cấu hình Wifi
     if(wifiMode==0) setupWebServer();
-
-  //    esp_err_t ret = nvs_flash_init();
-  //   if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-  //       nvs_flash_erase();
-  //       nvs_flash_init();
-  //   }
-  //  delay(1000);
-  //   // Khởi tạo WiFi
-  //   wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-  //   esp_wifi_init(&cfg);
-  //   esp_wifi_set_mode(WIFI_MODE_STA);
-  //   esp_wifi_start();
-
     delay(100);  // Đợi WiFi khởi động
   }
   void run(){
     checkButton();
     if(wifiMode==0)webServer.handleClient();
-   // DHT22.runTemp(); 
-  //DHT22.runHum();
+    if (WiFi.status() == WL_CONNECTED) {
+     t = DHT22.runTemp();
+     h = DHT22.runHum();
+
+  }
   }
 } wifiConfig;
 
