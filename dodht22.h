@@ -1,9 +1,5 @@
 
 
-#include <HTTPClient.h>
-
-
-
 #include <guisms.h>
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
@@ -117,9 +113,9 @@ public:
     if (readDHT22()) {
       // Ghép 2 byte thành giá trị 16-bit, rồi chia cho 10 để có đơn vị độ C
       temp = ((temp_high << 8) | temp_low) / 10.0;
-      Serial.print("Nhiet do: "); Serial.print(temp); Serial.println(" *C");
+     // Serial.print("Nhiet do: "); Serial.print(temp); Serial.println(" *C");
         hum = ((RH_high << 8) | RH_low) / 10.0;
-      Serial.print("Do am: "); Serial.print(hum); Serial.println(" %");
+    //  Serial.print("Do am: "); Serial.print(hum); Serial.println(" %");
       lcd.setCursor(0, 0);
     lcd.print("Nhiet do: ");
     lcd.print(temp);
@@ -135,15 +131,7 @@ public:
       Serial.println("Loi doc DHT22!");
     }
     
-    if ( temp >=25) {
-      digitalWrite(LEDWAR, HIGH);
-      digitalWrite(COIWAR, HIGH);
-      guiSMS.run();
-    }
-   else {
-    digitalWrite(LEDWAR, LOW);
-    digitalWrite(COIWAR, LOW);
-   }
+    
     return temp;
   }
 

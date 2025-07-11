@@ -1,3 +1,4 @@
+
 #include <EEPROM.h> //Tên wifi và mật khẩu lưu vào ô nhớ 0->96
 #include <ArduinoJson.h>
 #include <WiFi.h>
@@ -6,6 +7,14 @@
 #include "dodht22.h"//dodht22.h: Thư viện riêng để đọc cảm biến DHT22.
 
 
+#include <HTTPClient.h>
+String Web_App_URL = "https://script.google.com/macros/s/AKfycbwYjRgvJWVResLPTg9Q5l83GIDQe2DTmwUF17Zkaxaog1bjVR3zU_qkFiE-OQ8iAOs/exec";
+//https://script.google.com/macros/s/AKfycbzz5DVJuy-aRHueeO1nFMzWUQ3wLT82HoNlxX7CY3b-mYG8xQueVal4YWoTO02axYY/exec
+unsigned long currentTime=millis();
+unsigned long currentTime2 = millis();
+ float temp1 ;   
+ float humi1 ;
+float tempWar=35;
 
 
 
@@ -392,8 +401,7 @@ void ledControl() {
 
 // Hàm xử lý các sự kiện WiFi, tự động gọi khi có sự kiện xảy ra
 void WiFiEvent(WiFiEvent_t event) {
-    Serial.print("Event:");
-    Serial.println(event); // In mã số sự kiện ra Serial để kiểm tra
+   
 
     switch (event) {
         // Sự kiện khi ESP32 đã kết nối với AP thành công (chưa lấy IP)
@@ -404,8 +412,21 @@ void WiFiEvent(WiFiEvent_t event) {
 
         // Sự kiện khi ESP32 bị mất kết nối WiFi
         case ARDUINO_EVENT_WIFI_STA_DISCONNECTED:
-            
+            checklostwifi+=1;
                 // Nếu số lần mất kết nối < 10 lần thì thử kết nối lại Wi-Fi
+               if (checklostwifi==10){
+                // Xoá toàn bộ vùng nhớ EEPROM (giả sử 100 byte được dùng để lưu SSID, password,...)
+      for (int i = 0; i < 100; i++) {
+        EEPROM.write(i, 0);  // Ghi giá trị 0 vào từng ô nhớ
+      }
+
+      EEPROM.commit();  // Lưu thay đổi vào bộ nhớ thực tế
+      Serial.println("✅ EEPROM memory erased!");
+
+      delay(2000);       // Đợi 2 giây trước khi khởi động lại
+      ESP.restart();     // Khởi động lại ESP32 để vào chế độ cấu hình Wi-Fi
+                checklostwifi=0;
+               }
                 Serial.println("WiFi lost connection.");
                 wifiMode = 2; // Đặt chế độ Wi-Fi về 2 (đang cố gắng reconnect)
                        // Đợi ngắt kết nối hoàn tất
@@ -457,12 +478,11 @@ void setupWifi(){
     Serial.println("🚀 ESP32 wifi network created!");
     WiFi.mode(WIFI_AP);  // Chuyển sang chế độ Access Point
 
-    uint8_t macAddr[6];
-    WiFi.softAPmacAddress(macAddr); // Lấy địa chỉ MAC của ESP32 ở chế độ AP
+    
 
     // Tạo tên SSID cho AP dựa trên 2 byte cuối của địa chỉ MAC
-    String ssid_ap = "ESP32-" + String(macAddr[4], HEX) + String(macAddr[5], HEX);
-    ssid_ap.toUpperCase(); // Chuyển tên SSID thành chữ in hoa
+    String ssid_ap = "ESP32" ;
+    
 
     // Khởi động Access Point với SSID mới tạo
     WiFi.softAP(ssid_ap.c_str());
@@ -532,20 +552,7 @@ void setupWebServer() {
     EEPROM.writeString(32,password_temp);
     EEPROM.commit();
     webServer.send(200,"text/plain","Wifi has been saved!");// Kiểm tra nếu có đủ thông tin từ người dùng
-      // if (webServer.hasArg("ssid") && webServer.hasArg("pass")) {
-      //   ssid = webServer.arg("ssid").c_str();       // Lấy SSID từ client
-      //   password = webServer.arg("pass").c_str();   // Lấy mật khẩu từ client
-        
-      //   EEPROM.put(0, ssid);          // Lưu SSID vào EEPROM từ địa chỉ 0
-      //   EEPROM.put(50, password);     // Lưu mật khẩu từ địa chỉ 50
-      //   EEPROM.commit();              // Ghi vào bộ nhớ thực tế
 
-      //   webServer.send(200, "text/plain", "WiFi information saved! Restarting...");
-      //   delay(2000);  // Đợi một chút trước khi khởi động lại
-      //   ESP.restart();
-      // } else {
-      //   webServer.send(400, "text/plain", "Missing parameters");  // Báo lỗi thiếu thông tin
-      // }
     });
   }
 
@@ -580,6 +587,48 @@ void checkButton() {
   }
 }
 
+void writeSheet(){
+  String Send_Data_URL = Web_App_URL + "?sts=write";
+  Send_Data_URL += "&temp=" + String(temp1);
+  Send_Data_URL += "&humi=" + String(humi1);
+  //Serial.println();
+  //Serial.println("-------------");
+ // Serial.println("Send data to Google Spreadsheet...");
+ // Serial.print("URL : ");
+  //Serial.println(Send_Data_URL);
+  // Initialize HTTPClient as "http".
+  HTTPClient http;
+
+  // HTTP GET Request.
+  http.begin(Send_Data_URL.c_str());
+  http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
+
+  // Gets the HTTP status code.
+  int httpCode = http.GET(); 
+ // Serial.print("HTTP Status Code : ");
+ // Serial.println(httpCode);
+
+  // Getting response from google sheets.
+  String payload;
+  if (httpCode > 0) {
+    payload = http.getString();
+   // Serial.println("Payload : " + payload);    
+  }
+  
+  http.end();
+}
+String dataForm(float value, int leng, int decimal){
+  String str = String(value,decimal);
+  if(str.length()<leng){
+    int space = leng-str.length();
+    for(int i=0;i<space;++i){
+      str = " "+str;
+    }
+  }
+  return str;
+}
+
+
 
 class Config{
 public:
@@ -605,9 +654,22 @@ public:
     if (WiFi.status() == WL_CONNECTED) {
      t = DHT22.runTemp();
      h = DHT22.runHum();
-
+      temp1 = t;
+      humi1 = h;
+ if(millis()-currentTime2>180000){
+    writeSheet();
+    currentTime2=millis();
+  }
+  if ( t >= tempWar) {
+      digitalWrite(LEDWAR, HIGH);
+      digitalWrite(COIWAR, HIGH);
+     // guiSMS.run();
+    }
+   else {
+    digitalWrite(LEDWAR, LOW);
+    digitalWrite(COIWAR, LOW);
+   }
   }
   }
 } wifiConfig;
-
 

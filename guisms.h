@@ -15,7 +15,7 @@ void send_SMS(String phone, String content) {
   moduleSim.print(content);
   moduleSim.write(26); // Ctrl+Z
   delay(1000);
-  Serial.println("Đã gửi tin nhắn đến: " + phone);
+ // Serial.println("Đã gửi tin nhắn đến: " + phone);
 }
 
 void setupModuleSim() {
