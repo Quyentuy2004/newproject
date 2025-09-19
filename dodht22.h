@@ -1,14 +1,12 @@
 
-
-#include <guisms.h>
 #include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+//#include <LiquidCrystal_I2C.h>
 
 #define DHTPIN 4  // Chân GPIO4 kết nối với chân DATA của cảm biến DHT22
 #define LEDWAR 23  
 #define COIWAR 5
 
-LiquidCrystal_I2C lcd(0x27, 16, 2);
+//LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 
 
@@ -19,15 +17,15 @@ float temp;  // Giá trị nhiệt độ sau khi tính toán
 unsigned long startTime;  // Biến thời gian để đo độ dài xung
 
 
-void setup_lcd(){
-    Wire.begin(21,22);
-  lcd.init();              // Khởi động LCD
-  lcd.backlight();         // Bật đèn nền
+// void setup_lcd(){
+//     Wire.begin(21,22);
+//   lcd.init();              // Khởi động LCD
+//   lcd.backlight();         // Bật đèn nền
  
-  lcd.setCursor(0, 0);
-  lcd.print("Dang khoi dong...");
-   delay(1000);
-}
+//   lcd.setCursor(0, 0);
+//   lcd.print("Dang khoi dong...");
+//    delay(1000);
+// }
 
 // Đọc 1 byte dữ liệu từ DHT22
 byte Readbit(){
@@ -103,8 +101,8 @@ public:
     pinMode(LEDWAR, OUTPUT);
     pinMode(COIWAR, OUTPUT);
     digitalWrite(DHTPIN, HIGH);  // Đặt chân DATA lên HIGH (idle)
-    setup_lcd();   
-    guiSMS.begin();
+    //setup_lcd();   
+    //guiSMS.begin();
     delay(2000);                    // Chờ cảm biến ổn định
   }
 
@@ -115,23 +113,31 @@ public:
       temp = ((temp_high << 8) | temp_low) / 10.0;
      // Serial.print("Nhiet do: "); Serial.print(temp); Serial.println(" *C");
         hum = ((RH_high << 8) | RH_low) / 10.0;
-    //  Serial.print("Do am: "); Serial.print(hum); Serial.println(" %");
-      lcd.setCursor(0, 0);
-    lcd.print("Nhiet do: ");
-    lcd.print(temp);
-    lcd.print(" C");
+      //Serial.print("Do am: "); Serial.print(hum); Serial.println(" %");
+    //   lcd.setCursor(0, 0);
+    // lcd.print("Nhiet do: ");
+    // lcd.print(temp);
+    // lcd.print(" C");
 
-    lcd.setCursor(0, 1);
-    lcd.print("Do am: ");
-    lcd.print(hum);
-    lcd.print(" %");
+    // lcd.setCursor(0, 1);
+    // lcd.print("Do am: ");
+    // lcd.print(hum);
+    // lcd.print(" %");
     } else {
-      lcd.setCursor(0, 0);
-    lcd.print("Doc DHT that bai!");
+    //   lcd.setCursor(0, 0);
+    // lcd.print("Doc DHT that bai!");
       Serial.println("Loi doc DHT22!");
     }
     
-    
+    if ( temp >=25) {
+      digitalWrite(LEDWAR, HIGH);
+      digitalWrite(COIWAR, HIGH);
+     // guiSMS.run();
+    }
+   else {
+    digitalWrite(LEDWAR, LOW);
+    digitalWrite(COIWAR, LOW);
+   }
     return temp;
   }
 
