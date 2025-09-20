@@ -8,8 +8,11 @@
 // #define Wifi_SSID "TP-Link_12A4"
 // #define Wifi_PASSWORD "25311839"
 
-#define Wifi_SSID "TP-LINK_8D46"
-#define Wifi_PASSWORD "62037891"
+// #define Wifi_SSID "TP-LINK_8D46"
+// #define Wifi_PASSWORD "62037891"
+
+#define Wifi_SSID "Phuong Anh"
+#define Wifi_PASSWORD "20062023"
 #define API_KEY "AIzaSyB_aDU1LR4WPYFR7DPktUHW3tQdmKxYkuM"
 #define DATABASE_URL "https://doan22-e15f5-default-rtdb.asia-southeast1.firebasedatabase.app/"
 
@@ -27,6 +30,7 @@ unsigned long prevMillisHis = 0;
 unsigned long prevMillisWar = 0;
 unsigned long sendDataWarning=0;
 unsigned long countHis = 0;
+int checktime=0;
 unsigned long countWar=0;
 bool signupOk = false;
 float Temp=0.0;
@@ -299,7 +303,9 @@ if (!Firebase.RTDB.beginStream(&fbdo_s3, "/LineSet/LineSet/"))
 }
 
 void loop() {
-  
+  if (checktime==0){
+   getTime();
+   checktime=1;}
  if ((millis()-prevMillisMain)>5000){
   prevMillisMain=millis(); 
   Hum= DHT22.runHum();
